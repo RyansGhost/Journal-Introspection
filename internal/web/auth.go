@@ -78,17 +78,17 @@ func totpCode(secret string, step int64) (string, error) {
 	return fmt.Sprintf("%06d", code%1_000_000), nil
 }
 
-// CheckTOTP accepts the current code and the ones either side of it.
-func CheckTOTP(secret, code string, now time.Time) bool {
+// CheckTOTP accepts the current code and the ones either side of it. It
+// returns the time step that matched, so the caller can refuse a replay.
+func CheckTOTP(secret, code string, now time.Time) (step int64, ok bool) {
 	code = strings.ReplaceAll(strings.TrimSpace(code), " ", "")
-	ok := false
 	for d := int64(-1); d <= 1; d++ {
 		want, err := totpCode(secret, now.Unix()/30+d)
 		if err == nil && subtle.ConstantTimeCompare([]byte(want), []byte(code)) == 1 {
-			ok = true
+			step, ok = now.Unix()/30+d, true
 		}
 	}
-	return ok
+	return step, ok
 }
 
 const (
@@ -202,7 +202,13 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	// Always run both checks so a wrong password and a wrong code take the same time.
 	passOK := CheckPassword(s.cfg.PasswordHash, r.FormValue("password"))
-	codeOK := s.cfg.TOTPSecret == "" || CheckTOTP(s.cfg.TOTPSecret, r.FormValue("code"), now)
+	codeOK := s.cfg.TOTPSecret == ""
+	if step, ok := CheckTOTP(s.cfg.TOTPSecret, r.FormValue("code"), now); ok && passOK && !codeOK {
+		// Each code works once: the insert fails if this step was already used.
+		_, err := s.db.ExecContext(ctx, `INSERT INTO totp_used(step) VALUES(?)`, step)
+		codeOK = err == nil
+		s.db.ExecContext(ctx, `DELETE FROM totp_used WHERE step<?`, step-10)
+	}
 	if !passOK || !codeOK {
 		s.db.ExecContext(ctx, `INSERT INTO login_attempts(ip, at) VALUES(?,?)`, ip, now.Unix())
 		fail(http.StatusUnauthorized, "That did not match.")

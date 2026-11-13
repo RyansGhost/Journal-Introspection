@@ -37,7 +37,7 @@ func newSite(t *testing.T, authDisabled bool) (*httptest.Server, *http.Client) {
 		t.Fatal(err)
 	}
 	rubric, _ := grader.LoadRubric("")
-	s, err := New(cfg, db, ix, grader.New(db, rubric, "", "kev-test"))
+	s, err := New(cfg, db, ix, grader.New(db, rubric, "", "kev-test", "kev-test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +79,11 @@ func TestPasswordAndTOTP(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	cur, _ := totpCode(testSecret, now.Unix()/30)
 	old, _ := totpCode(testSecret, now.Unix()/30-5)
-	if !CheckTOTP(testSecret, cur, now) || CheckTOTP(testSecret, old, now) {
-		t.Error("totp window is wrong")
+	if _, ok := CheckTOTP(testSecret, cur, now); !ok {
+		t.Error("current code refused")
+	}
+	if _, ok := CheckTOTP(testSecret, old, now); ok {
+		t.Error("stale code accepted")
 	}
 }
 
@@ -120,6 +123,10 @@ func TestLoginRequired(t *testing.T) {
 	}
 	if got := post("correct horse", code, nil); got != http.StatusSeeOther {
 		t.Fatalf("good login: want 303, got %d", got)
+	}
+	// The same code a second time is a replay, even with the right password.
+	if got := post("correct horse", code, nil); got != http.StatusUnauthorized {
+		t.Errorf("replayed code: want 401, got %d", got)
 	}
 	if code, body := get(t, c, ts.URL+"/journal/2026-11-13"); code != 200 || !strings.Contains(body, "chicken and sweet potatoes") {
 		t.Errorf("journal after login: %d", code)
@@ -163,6 +170,11 @@ func TestPages(t *testing.T) {
 	check("/files/", 200, "journal/", "projects/", "quicknote.txt")
 	check("/files/projects/introspection.org", 200, "Mac mini", "<table>")
 	check("/files/quicknote.txt", 200, "plain text scratch")
+	// Links between org files point inside the app; links to excluded files do not.
+	check("/files/projects/introspection.org", 200, `href="/files/quicknote.txt"`, `href="/files/roam/20240101120000-zettel.org"`)
+	if _, body := get(t, c, ts.URL+"/files/projects/introspection.org"); strings.Contains(body, `href="/files/crypto.org"`) {
+		t.Error("link to an excluded file was resolved")
+	}
 	check("/search?q=zettelkasten", 200, "<mark>zettelkasten</mark>")
 	check("/search?q=%22+OR+NEAR(", 200) // FTS syntax in the query must not break it
 	check("/status", 200, "3 journal")

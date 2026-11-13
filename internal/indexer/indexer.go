@@ -228,6 +228,7 @@ func kindOf(rel string) string {
 
 var (
 	titleKeyword = regexp.MustCompile(`(?im)^#\+title:\s*(.+)$`)
+	orgID        = regexp.MustCompile(`(?im)^\s*:ID:\s*(\S+)`)
 	firstHeading = regexp.MustCompile(`(?m)^\*+\s+(.+)$`)
 )
 
@@ -266,6 +267,11 @@ func (ix *Indexer) store(ctx context.Context, rel, src string, mtime, size int64
 	if _, err := tx.ExecContext(ctx, `INSERT INTO search(rowid, path, title, body) VALUES(?,?,?,?)`, id, rel, title, src); err != nil {
 		return err
 	}
+	for _, m := range orgID.FindAllStringSubmatch(src, -1) {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO org_ids(org_id, file_id) VALUES(?,?)`, m[1], id); err != nil {
+			return err
+		}
+	}
 	if kind == "journal" {
 		date, _ := JournalDate(path.Base(rel))
 		for i, e := range SplitJournal(date, src) {
@@ -282,8 +288,10 @@ func (ix *Indexer) store(ctx context.Context, rel, src string, mtime, size int64
 }
 
 func clearDerived(ctx context.Context, tx *sql.Tx, id int64) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM entries WHERE file_id=?`, id); err != nil {
-		return err
+	for _, table := range []string{"entries", "org_ids"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE file_id=?`, id); err != nil {
+			return err
+		}
 	}
 	_, err := tx.ExecContext(ctx, `DELETE FROM search WHERE rowid=?`, id)
 	return err

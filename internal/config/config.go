@@ -16,7 +16,8 @@ type Config struct {
 	Exclude      []string      // EXCLUDE: comma-separated globs never indexed or served
 
 	KevURL     string // KEV_URL: base URL of the Kev server; empty disables grading
-	KevModel   string // KEV_MODEL: model name sent to Kev and stored with every grade
+	KevModel   string // KEV_MODEL: model name sent to Kev
+	GradeLabel string // GRADE_LABEL: name grades are stored under (default KEV_MODEL); change it to regrade
 	RubricPath string // RUBRIC: optional path to a rubric.json overriding the built-in one
 
 	PasswordHash string // AUTH_PASSWORD_HASH: from `introspect hash-password`
@@ -27,6 +28,7 @@ type Config struct {
 }
 
 // DefaultExclude keeps the most sensitive files out of the index entirely.
+// Setting EXCLUDE replaces the whole list; setting it to "" excludes nothing.
 const DefaultExclude = "identities.org,crypto.org,finance*.org,invoices/**,bib/**,data/**,tmp/**"
 
 func env(key, def string) string {
@@ -55,6 +57,9 @@ func Load() (Config, error) {
 		return c, fmt.Errorf("SCAN_INTERVAL: want a duration like 2m, got %q", env("SCAN_INTERVAL", ""))
 	}
 	c.ScanInterval = d
+	if c.GradeLabel = env("GRADE_LABEL", ""); c.GradeLabel == "" {
+		c.GradeLabel = c.KevModel
+	}
 	for _, p := range strings.Split(env("EXCLUDE", DefaultExclude), ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			c.Exclude = append(c.Exclude, p)

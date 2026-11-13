@@ -69,7 +69,7 @@ func TestGradeAndRegrade(t *testing.T) {
 	srv := kevStub(t, &calls, http.StatusOK)
 	defer srv.Close()
 	ctx := context.Background()
-	g := New(db, rubric, srv.URL, "kev-test")
+	g := New(db, rubric, srv.URL, "kev-test", "kev-test")
 
 	if worked, err := g.gradeNext(ctx); !worked || err != nil {
 		t.Fatalf("first grade: worked=%v err=%v", worked, err)
@@ -92,7 +92,7 @@ func TestGradeAndRegrade(t *testing.T) {
 		t.Errorf("status: %+v", st)
 	}
 	// A different model (or rubric version) grades again and keeps the old rows.
-	g2 := New(db, rubric, srv.URL, "kev-other")
+	g2 := New(db, rubric, srv.URL, "kev-other", "kev-other")
 	if worked, _ := g2.gradeNext(ctx); !worked {
 		t.Error("new model did not regrade")
 	}
@@ -108,7 +108,7 @@ func TestRejectedEntryIsParked(t *testing.T) {
 	var calls atomic.Int32
 	srv := kevStub(t, &calls, http.StatusUnprocessableEntity)
 	defer srv.Close()
-	g := New(db, rubric, srv.URL, "kev-test")
+	g := New(db, rubric, srv.URL, "kev-test", "kev-test")
 	ctx := context.Background()
 	if worked, err := g.gradeNext(ctx); !worked || err != nil {
 		t.Fatalf("rejection should be recorded, not returned: worked=%v err=%v", worked, err)
@@ -127,7 +127,7 @@ func TestServerDownIsNotHeldAgainstTheEntry(t *testing.T) {
 	var calls atomic.Int32
 	srv := kevStub(t, &calls, http.StatusBadGateway)
 	defer srv.Close()
-	g := New(db, rubric, srv.URL, "kev-test")
+	g := New(db, rubric, srv.URL, "kev-test", "kev-test")
 	if worked, err := g.gradeNext(context.Background()); worked || err == nil {
 		t.Fatalf("want an error and no progress, got worked=%v err=%v", worked, err)
 	}

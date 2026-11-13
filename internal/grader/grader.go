@@ -29,7 +29,7 @@ type Status struct {
 type Grader struct {
 	db     *store.DB
 	Rubric *Rubric
-	Model  string
+	Model  string     // the label grades are stored under
 	kev    *kevClient // nil when KEV_URL is not set
 
 	wake chan struct{}
@@ -37,8 +37,10 @@ type Grader struct {
 	st   Status
 }
 
-func New(db *store.DB, rubric *Rubric, kevURL, model string) *Grader {
-	g := &Grader{db: db, Rubric: rubric, Model: model, wake: make(chan struct{}, 1)}
+// New makes a grader. model is the name sent to Kev; label is what grades are
+// stored under, so changing it regrades everything.
+func New(db *store.DB, rubric *Rubric, kevURL, model, label string) *Grader {
+	g := &Grader{db: db, Rubric: rubric, Model: label, wake: make(chan struct{}, 1)}
 	if kevURL != "" {
 		g.kev = newKevClient(kevURL, model)
 	}

@@ -1,4 +1,5 @@
 /data/
+/.dev/
 /introspect
 /fakekev
 *.db

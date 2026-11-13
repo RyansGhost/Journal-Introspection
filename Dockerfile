@@ -4,7 +4,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/introspect ./cmd/introspect \
+# CMD=fakekev builds the stand-in grader instead (see compose.local.yaml).
+ARG CMD=introspect
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/introspect ./cmd/$CMD \
  && mkdir -p /out/data
 
 FROM scratch

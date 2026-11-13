@@ -63,6 +63,12 @@ CREATE TABLE IF NOT EXISTS grade_failures (
   PRIMARY KEY (entry_hash, rubric_version, model)
 ) WITHOUT ROWID;
 
+-- Every org :ID: property, so [[id:...]] links (org-roam) can be followed.
+CREATE TABLE IF NOT EXISTS org_ids (
+  org_id  TEXT PRIMARY KEY,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(
   path, title, body, tokenize = 'porter unicode61'
 );
@@ -72,6 +78,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
 ) WITHOUT ROWID;
+
+-- Authenticator codes already used, so a code cannot be replayed.
+CREATE TABLE IF NOT EXISTS totp_used (step INTEGER PRIMARY KEY);
 
 CREATE TABLE IF NOT EXISTS login_attempts (
   ip TEXT NOT NULL,

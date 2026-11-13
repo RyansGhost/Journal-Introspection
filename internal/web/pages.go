@@ -1,12 +1,14 @@
 package web
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"html"
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"sort"
 	"strings"
@@ -97,6 +99,29 @@ func (s *Server) files(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "files.html", map[string]any{"Title": "/" + rel, "Crumbs": crumbs(rel), "Items": append(dirs, items...), "Count": len(items)})
 }
 
+// resolver turns links between org files into links inside the app: file
+// links relative to the directory of the file being shown, and org-roam id
+// links through the index. Links to files that are not indexed are left alone.
+func (s *Server) resolver(ctx context.Context, dir string) orgrender.Resolver {
+	return func(protocol, target string) string {
+		var rel string
+		switch protocol {
+		case "id":
+			s.db.QueryRowContext(ctx, `SELECT f.path FROM org_ids o JOIN files f ON f.id = o.file_id WHERE o.org_id=? AND f.deleted_at IS NULL`, target).Scan(&rel)
+		case "file", "":
+			target, _, _ = strings.Cut(target, "::")
+			if target == "" || strings.HasPrefix(target, "/") || strings.HasPrefix(target, "~") {
+				return ""
+			}
+			s.db.QueryRowContext(ctx, `SELECT path FROM files WHERE path=? AND deleted_at IS NULL`, path.Join(dir, target)).Scan(&rel)
+		}
+		if rel == "" {
+			return ""
+		}
+		return (&url.URL{Path: "/files/" + rel}).String()
+	}
+}
+
 const maxRender = 4 << 20
 
 func (s *Server) file(w http.ResponseWriter, r *http.Request, rel, title string, mtime int64) {
@@ -113,7 +138,7 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request, rel, title string,
 	}
 	var body template.HTML
 	if strings.HasPrefix(path.Ext(rel), ".org") {
-		body = orgrender.HTML(string(raw), true)
+		body = orgrender.HTML(string(raw), true, s.resolver(r.Context(), path.Dir(rel)))
 	} else {
 		body = template.HTML(`<pre class="plain">` + html.EscapeString(string(raw)) + `</pre>`)
 	}

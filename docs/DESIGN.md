@@ -1,192 +1,160 @@
-# Journal Introspection — design and implementation plan
+# Journal Introspection: design
 
-## Context
+A private web app for reading a directory of org-mode files, with a timeline of journal entries graded by a local model. Setup and settings are in the [README](../README.org); this document explains how it works and why.
 
-Ryan keeps ~715 daily journal files, ~980 org-roam notes and ~50 topic files in `~/SyncRoot/org`. He wants a tiny private web app to read them, plus a timeline that charts his mental state over time by having a local model grade each journal entry. The repo (`ryansghost/journal-introspection`) is empty, so this is a greenfield build.
+## Goals
 
-Decisions already made:
+- Read journal entries, notes and tables from `~/SyncRoot/org` in a browser.
+- Grade each journal entry on a few qualities (mood, energy, anxiety and so on) and chart them over time.
+- Stay small and readable: one binary, one database file, a few thousand lines of Go.
+- Never write to the org files. They are the source of truth; everything else can be rebuilt.
 
-- **Language:** Go.
-- **Grader:** [Kev](https://github.com/jaredpalmer/kev), a Jev-like decision model, running on the Mac mini.
-- **Exposure:** public internet behind a reverse proxy, so the app needs real authentication.
+## Decisions
 
-Two facts from research that shape the design:
+| Decision | Choice | Why |
+|---|---|---|
+| Language | Go | Static binary, 14 MB `scratch` image, standard-library HTTP and templates |
+| Storage | SQLite (`modernc.org/sqlite`, pure Go) | One user and one writer; includes full-text search; no C compiler needed |
+| Org parsing | `go-org` | The parser Hugo uses; handles tables, drawers, tags and links |
+| Grader | [Kev](https://github.com/jaredpalmer/kev) on the Mac mini | Returns calibrated scores for questions with written levels, with no prompt parsing |
+| Model | Kev-0.8B | The Mac mini has 16 GB; Kev-4B wants 32 GB |
+| Charts | Server-rendered SVG | No JavaScript build or chart library; works with scripts off |
+| Hosting | Home server, Docker Compose, Caddy for TLS | Org files and the Mac mini are on the same network |
+| Access | Public address, password plus authenticator code | Chosen for reach; see Security |
 
-- **Kev is not an Ollama model.** It is a Python server (`python -m kev.serve --run jaredpalmer/kev-4b --port 8009`) with its own API, `POST /v1/systemone`. It runs on the Mac mini beside Ollama. Ollama is only needed for optional prose summaries (phase 6).
-- **Kev fits this job well.** You send text plus `score` / `noul` / `choice` questions with written level descriptions, and get back a calibrated score, per-level probabilities and a confidence. No prompt parsing or JSON repair is needed.
-
-## Build status
-
-Phases 1 to 5 are implemented and tested (see "Implementation phases"). Not yet done or not yet verified:
-
-- **Docker image build.** The Dockerfile and compose file are written but were not built, because the build machine had no Docker daemon. The static binary is 14 MB.
-- **Real Kev.** Grading is tested against a stand-in server that copies the response shape in the Kev README. It has not been run against a real Kev server, and the rubric has not been checked against real entries.
-- **Org links.** `[[file:...]]` and org-roam `[[id:...]]` links are not rewritten to point inside the app.
-- **TOTP replay.** A code can be reused within its 90-second window.
+Kev is not an Ollama model. It is a Python server with its own API, `POST /v1/systemone`, and runs on the Mac mini. Ollama is not used yet.
 
 ## Architecture
 
 ```
- Emacs ──Syncthing──▶ host:/srv/org (read-only mount)
+ Emacs ──sync──▶ home server: ORG_DIR (mounted read-only)
                               │
- browser ─TLS─▶ Caddy ─▶ ┌────┴──────────────── introspect (Go, one binary) ┐
-                         │ indexer ─▶ SQLite (/data/introspect.db) ◀─ web   │
-                         │ grader worker ──────────┐                        │
-                         └─────────────────────────┼────────────────────────┘
-                                                   ▼ (LAN / Tailscale)
-                              Mac mini: kev.serve :8009   (Ollama :11434, optional)
+ browser ─TLS─▶ Caddy ─▶ ┌────┴──────────── introspect (one Go process) ┐
+                         │ indexer ─▶ SQLite (/data/introspect.db) ◀─ web │
+                         │ grader ─────────────────┐                      │
+                         └─────────────────────────┼──────────────────────┘
+                                                   ▼ LAN
+                                    Mac mini: kev.serve :8009
 ```
 
-One process, three parts:
-
-| Part | Job |
-|---|---|
-| Indexer | Walks the org tree, detects changed files, parses journal entries into SQLite |
-| Grader | Background worker that sends ungraded entries to Kev and stores the scores |
-| Web | Login, journal home with timeline and reader, file browser, search, status |
-
-### Stack
-
-- Go stdlib `net/http` (1.22+ pattern routing), `html/template`, `embed` for templates and CSS.
-- `modernc.org/sqlite`: pure Go, so `CGO_ENABLED=0` and a `scratch` image (~15–20 MB). Includes FTS5 for search.
-- `github.com/niklasfasching/go-org`: the org parser Hugo uses. Renders tables, headings, emphasis, links, properties and tags to HTML.
-- `golang.org/x/crypto/argon2` for the password hash. TOTP is ~40 lines of stdlib HMAC.
-- Charts are server-rendered inline SVG. No JS build step and no chart library; a few lines of vanilla JS handle hover and click-to-open.
-
-SQLite is the right store: one user, one writer, a few thousand rows. Everything in it is derived from the org files, so the database can be deleted and rebuilt at any time.
+| Part | Package | Job |
+|---|---|---|
+| Indexer | `internal/indexer` | Walk the tree, find changed files, split journals into entries, feed search |
+| Grader | `internal/grader` | Send ungraded entries to Kev one at a time, store the answers |
+| Web | `internal/web` | Login, journal and timeline, file browser, search, status |
+| Store | `internal/store` | Open SQLite and apply `schema.sql` |
 
 ## Change detection
 
-The org files are the source of truth and are never written to.
+The indexer scans on start and every `SCAN_INTERVAL` (2 minutes by default). It polls because file-change notifications are unreliable on synced folders and container mounts.
 
-1. On start and every `SCAN_INTERVAL` (default 2 min), walk `ORG_ROOT`. Polling is used instead of fsnotify because inotify is unreliable on bind mounts and synced folders.
-2. For each file, compare `(mtime, size)` with the `files` row. If unchanged, skip.
-3. If changed, read it and compute a SHA-256. If the hash is the same (Syncthing touched it), update the mtime only.
-4. If the content changed, re-parse. For journal files, split into entries and hash each entry body.
-5. **Grades are keyed by `(entry_hash, rubric_version, model)`.** Editing one entry regrades only that entry. Changing the rubric or the model regrades everything, and the old grades stay for comparison.
-6. Files that disappear are marked deleted; their grades are kept.
+1. Skip hidden paths, non-text files and anything matching `EXCLUDE`.
+2. If a file's modified time and size match the stored row, skip it.
+3. Otherwise read it and hash it. Same hash means it was only touched: update the stored time and stop.
+4. Different hash: re-parse the file, replace its entries, search text and link ids.
+5. Files that have disappeared, or are newly excluded, are marked deleted and leave the index.
+
+A first index of 400 files took 160 ms; later scans only stat each file.
+
+## Journal entries
+
+A journal file is `journal/YYYYMMDD.org`. Each level-2 heading (`** 07:37`) starts an entry. Tags and the property drawer are kept as metadata and left out of the text. Text before the first heading, or a file with no headings, is one entry with no time.
+
+Each entry has a hash of its text, and **grades are keyed by `(entry hash, rubric version, grade label)`**. This gives three properties:
+
+- Editing one entry regrades that entry only.
+- Changing the rubric or the model regrades everything, and the old grades stay.
+- Deleting and restoring a file costs nothing, because the grades are still there.
+
+## Grading
+
+The rubric (`internal/grader/rubric.json`) is a list of Kev questions. Its hash is the rubric version.
+
+| Dimension | Type | Levels |
+|---|---|---|
+| mood, energy | score | 5, from despairing or exhausted to joyful or energised |
+| anxiety, stress, connection, purpose, self-regard | score | 4 |
+| rumination, mentions sleep / exercise / conflict | yes/no | probability |
+| theme | choice | work, relationship, family, friends, faith, health, money, projects, other |
+
+How the worker behaves:
+
+- One entry at a time, newest first, so recent days appear first and the Mac mini is never flooded. The first pass over about 715 days runs in the background and resumes after a restart.
+- If Kev is unreachable, wait and retry with a growing delay (5 seconds up to 10 minutes). The entry is not blamed.
+- If Kev rejects an entry (HTTP 4xx or a malformed answer), park it for an hour, then longer, and move on. The status page lists these.
+- Entries over 3,000 words are split on paragraphs to fit Kev's 8,192-token context, and the answers are combined weighted by word count.
+- A day's score is the word-weighted mean of its entries.
+
+The scores are a model's reading of the text. They are useful for trends and are not a clinical measure; the page says so, and the chart defaults to a 7-day average so one odd grade does not dominate.
 
 ## Data model
 
 ```sql
-files(id, path UNIQUE, kind, title, mtime, size, sha256, indexed_at, deleted_at)
-  -- kind: journal | roam | note | other
-entries(id, file_id, date, time, heading, body_org, tags, props_json,
-        word_count, content_hash)          -- one row per "** HH:MM" block
-grades(entry_hash, rubric_version, model, dimension,
-       score, label, confidence, probs_json,
-       PRIMARY KEY(entry_hash, rubric_version, model, dimension))
-graded(entry_hash, rubric_version, model, graded_at)   -- one row per graded entry
+files(id, path, kind, title, mtime, size, sha256, indexed_at, deleted_at)   -- kind: journal | roam | note
+entries(id, file_id, date, time, heading, body_org, tags, props_json, word_count, content_hash, seq)
+org_ids(org_id, file_id)                       -- :ID: properties, for [[id:...]] links
+search USING fts5(path, title, body)           -- every indexed file
+grades(entry_hash, rubric_version, model, dimension, score, label, confidence, probs_json)
+graded(entry_hash, rubric_version, model, graded_at)
 grade_failures(entry_hash, rubric_version, model, attempts, last_error, next_try_at)
-search USING fts5(path, title, body)       -- all org files
 sessions(token_hash, created_at, expires_at)
 login_attempts(ip, at)
+totp_used(step)
 ```
 
-Journal parsing: `journal/YYYYMMDD.org` gives the date; each `** HH:MM` heading starts an entry; tags and `:PROPERTIES:` drawers are kept as metadata and stripped from the text sent to Kev. A file with no time headings is one entry.
-
-## Grading rubric
-
-The rubric lives in `internal/grader/rubric.json` and is compiled into the binary; `RUBRIC` points at a replacement file. A short hash of the file is the `rubric_version`. Each dimension is one Kev question with written anchor levels, for example:
-
-```json
-"mood": {"type": "score",
-  "instructions": "What is the writer's overall emotional tone in this journal entry?",
-  "criteria": ["Despairing or hopeless", "Low, sad or flat", "Neutral or mixed",
-               "Content and positive", "Joyful, grateful or elated"]}
-```
-
-Starting set (easy to edit later, and edits trigger a regrade):
-
-| Dimension | Type | Notes |
-|---|---|---|
-| mood | score, 5 levels | Headline line on the timeline |
-| energy | score, 5 | Exhausted → energised |
-| anxiety | score, 4 | None → overwhelming |
-| stress | score, 4 | Work and life load |
-| connection | score, 4 | Isolated → close time with people |
-| purpose | score, 4 | Aimless → meaningful; includes faith |
-| self_regard | score, 4 | Harsh self-criticism → self-respect |
-| rumination | noul | Looping on a worry or regret |
-| mentions_sleep, mentions_exercise, mentions_conflict | noul | Context markers on the chart |
-| theme | choice | work, relationship, faith, health, money, projects, family, other |
-
-Grader behaviour:
-
-- One goroutine, one request at a time, so the Mac mini is never flooded. The first backfill of ~715 days runs in the background and is resumable.
-- If Kev is unreachable, retry with backoff. The reader works with no grades at all.
-- Entries over Kev's 8,192-token context are split on paragraphs and combined as a word-weighted mean.
-- A day's score is the word-weighted mean of its entries. Low-confidence scores are marked "uncertain" in the day panel.
-- `KEV_URL` and `KEV_MODEL` are environment variables. Start with `kev-4b` if the Mac mini has 32 GB, otherwise `kev-0.8b`.
-
-The page says plainly that these are a model's readings of the text, useful for spotting trends, and not a clinical measure. The chart defaults to 7- and 30-day rolling averages so one odd grade does not dominate.
+The first four tables are the index. When their layout changes, `indexVersion` in `store.go` is bumped, the index is dropped on the next start and rebuilt by the first scan. Grades and sessions survive.
 
 ## Pages
 
 | Route | Content |
 |---|---|
-| `/login` | Password + TOTP |
-| `/` | Journal home. Top: timeline (mood line, toggles for other dimensions, daily / 7-day / 30-day averaging, range buttons 3m/1y/all) and a calendar heat strip. Below: the reader for the selected day, with previous/next and that day's scores beside it. Clicking the chart loads that day. |
-| `/journal/2026-11-13` | Same page pinned to a day (linkable) |
-| `/files`, `/files/{path}` | Directory tree and rendered org file, tables included. `.org_archive` renders as org; `.md`, `.txt`, `.lisp` show as plain text. |
-| `/search?q=` | FTS5 search over all files |
-| `/status` | Files indexed, grading queue, last Kev error, a "rescan now" button |
+| `/`, `/journal/{date}` | Timeline, year grid and reader for one day (the latest by default) |
+| `/files/{path}` | Directory listing or a rendered file |
+| `/search?q=` | Full-text search over every indexed file |
+| `/status` | What the last scan did, grading progress, Kev errors, a "scan now" button |
+| `/login`, `/logout`, `/healthz` | Sign in and out; health probe |
 
-Visual style: plain, text-first, serif reading column, light and dark themes, no framework.
+The journal page:
 
-## Security (public exposure)
+- **Timeline.** One line per quality on a shared low-to-high axis. Mood is shown by default; the others are toggled from the legend. Daily, 7-day or 30-day averaging; 3-month, 1-year or full range. Settings live in the URL, so a view can be bookmarked.
+- **Year grid.** One cell per day of the selected year, coloured by mood, red through grey to blue.
+- **Reader.** The day's entries as rendered org, with the day's scores beside them.
+- Clicking a day on either chart opens it. Left and right arrow keys move between days.
 
-The journal is about the most sensitive data a person has, so:
+Links between org files (`[[file:...]]` and org-roam `[[id:...]]`) point inside the app when the target is indexed.
 
-- Single user. `AUTH_PASSWORD_HASH` (argon2id) and `AUTH_TOTP_SECRET` come from the environment. A `introspect hash-password` subcommand generates them.
-- Session cookie: random 256-bit token, stored hashed, `Secure; HttpOnly; SameSite=Strict`, 30-day expiry.
-- Login rate limit by IP (5 per 15 min) and constant-time comparisons.
-- Every route except `/login`, `/healthz` and `/static/` requires a session. Cross-site POSTs are refused by checking `Sec-Fetch-Site` and `Origin`, which with the `SameSite=Strict` cookie replaces a CSRF token.
-- Headers: strict CSP (no inline scripts, no third-party origins), `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`.
-- Paths are resolved under `ORG_ROOT` with `os.Root` so traversal and symlink escapes are impossible.
-- `EXCLUDE` globs keep files out of the index entirely. Default: `identities.org`, `crypto.org`, `finance*.org`, `invoices/**`, `bib/**`, `data/**`, `tmp/**`.
-- Container runs as non-root, read-only root filesystem, `/org` mounted read-only, only `/data` writable.
-- Kev and Ollama are never exposed publicly; the container reaches the Mac mini over LAN or Tailscale.
+## Security
 
-**Recommendation:** even with all of this, put a second gate at the proxy (Caddy basic auth, mTLS, or Tailscale Funnel/Serve). A bug in a hobby app should not be the only thing between the internet and the journal.
+The journal is about the most sensitive data a person has, and this is reachable from the internet.
 
-## Repo layout
+- **Login.** One user. An argon2id password hash and an authenticator secret come from the environment. Each code works once. Five failed attempts from an address lock it out for fifteen minutes.
+- **Sessions.** A random 256-bit token, stored hashed, in a `Secure; HttpOnly; SameSite=Strict` cookie that lasts 30 days.
+- **Cross-site requests.** POSTs are refused unless `Sec-Fetch-Site` or `Origin` shows they came from the site itself.
+- **Headers.** A strict Content-Security-Policy (no inline scripts or styles, nothing from other sites), no framing, no referrer, no indexing.
+- **Files.** Everything is read through `os.Root`, so paths cannot escape the org directory. Pages are served only for files in the index, so an excluded file cannot be listed, opened, searched or linked to.
+- **Container.** Runs as a non-root user with a read-only filesystem and no capabilities. The org directory is mounted read-only.
+- **Kev** stays on the LAN and is never exposed.
 
-```
-cmd/introspect/main.go        flags/env, wiring, subcommands (serve, hash-password, healthcheck)
-internal/config/              env parsing
-internal/store/               SQLite open, migrations (embedded .sql), queries
-internal/indexer/             walk, change detection, journal splitter
-internal/orgrender/           go-org wrapper → safe HTML
-internal/grader/              rubric loader, Kev client, worker, aggregation
-internal/web/                 handlers, auth middleware, SVG chart, templates/, static/
-cmd/fakekev/main.go           stand-in Kev server for development
-testdata/org/                 small fake org tree, including edge-case journals
-Dockerfile  compose.yaml  Caddyfile  .env.example  README.org
-```
+Recommended: also turn on the `basic_auth` block in the `Caddyfile`, so a bug in this app is not the only thing between the internet and the journal.
 
-## Implementation phases
+## Verified and not verified
 
-Each phase ends with something that runs.
+Verified by tests (`make test`) and by running it on a made-up journal of 250 days:
 
-1. **Skeleton (done).** `go mod`, config, SQLite migrations, `/healthz`, Dockerfile (`golang` build stage → `scratch`), compose file. Check image size.
-2. **Indexer (done).** Walk, mtime/size/hash detection, journal splitter, FTS. Table-driven tests on `testdata/org` covering: touch without change, edit one entry, delete a file, no time headings, tags and property drawers.
-3. **Reader (done).** Auth (password, TOTP, sessions, rate limit, headers), file tree, org rendering, journal day view with previous/next, search.
-4. **Grader (done).** Rubric loader, Kev client, worker with backoff, chunking, day aggregation, `/status`. Tested against an `httptest` fake Kev that returns the README's response shape.
-5. **Timeline (done).** SVG chart, rolling averages, dimension toggles, calendar strip, click-to-open, hover tooltip, table view.
-6. **Later, optional.** Weekly and monthly prose summaries through Ollama; correlations between dimensions; one-click "this grade is wrong" notes; a small labelled set to fine-tune Kev on your own entries (`kev.train`).
+- Change detection: untouched, touched, edited, deleted and restored files.
+- Journal splitting, including tags, property drawers and files with no time headings.
+- Grading, regrading on a new label, parked rejections, and outages not counting against an entry.
+- Login, single-use codes, rate limit, cross-site refusal, excluded files, path escapes, link rewriting.
+- The pages in light, dark and phone layouts.
 
-Mac mini setup (documented in the README, done by hand): clone Kev, `uv sync --extra serve`, run `kev.serve` under launchd bound to the LAN or Tailscale address.
+Not verified:
 
-## Verification
+- **The Docker image and compose files.** They are written but were not built, because the build machine had no Docker daemon.
+- **A real Kev server.** Grading is tested against `fakekev`, which copies the response format in Kev's README. The rubric wording has not been tried on real entries and will likely need adjusting.
 
-- `go vet ./... && go test ./...`: indexer change-detection cases, journal splitter, grade keying and regrade on rubric change, auth middleware (unauthenticated requests get 302, rate limit triggers, path traversal is refused).
-- `docker build` and confirm the image is under ~25 MB and runs as non-root with a read-only root filesystem.
-- End to end with `compose up` against `testdata/org` and the fake Kev: log in, open a journal day, edit a fixture file and see it reindexed and regraded on `/status`, see the point move on the timeline. Screenshot the home page in light and dark with Playwright.
-- Against the real Mac mini: grade ten real entries with `kev-4b` and read the scores beside the text to sanity-check the rubric before starting the full backfill.
+## Later
 
-## Open points to confirm during the build
-
-- **Where the container runs.** If it is a VPS, the org files need a Syncthing node there and Kev needs a Tailscale route to the Mac mini. If it is a home server, both are already local.
-- **Mac mini RAM**, which decides `kev-4b` versus `kev-0.8b`.
-- **The exclude list** above is a guess from the file names.
+- Weekly and monthly prose summaries through Ollama.
+- Marking a grade as wrong, to build a small labelled set and fine-tune Kev on your own entries.
+- Correlations between qualities, and with sleep and exercise mentions.
+- Images in org files.

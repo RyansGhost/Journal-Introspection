@@ -1,0 +1,25 @@
+# Try the container locally: made-up journal, stand-in grader, no login, no Caddy.
+# Run `make local`, then open http://127.0.0.1:8080
+services:
+  introspect:
+    build: .
+    read_only: true
+    ports: ["127.0.0.1:8080:8080"]
+    environment:
+      AUTH_DISABLED: "1"
+      KEV_URL: http://fakekev:8009
+      GRADE_LABEL: fakekev
+      SCAN_INTERVAL: 5s
+    volumes:
+      - ${ORG_DIR:-./.dev/org}:/org:ro
+      - local_data:/data
+
+  fakekev:
+    build:
+      context: .
+      args: { CMD: fakekev }
+    command: [":8009"]
+    healthcheck: { disable: true }
+
+volumes:
+  local_data:

@@ -63,7 +63,7 @@ func serve() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	g := grader.New(db, rubric, cfg.KevURL, cfg.KevModel)
+	g := grader.New(db, rubric, cfg.KevURL, cfg.KevModel, cfg.GradeLabel)
 	ix := indexer.New(db, cfg.OrgRoot, cfg.Exclude)
 	ix.OnChange = g.Wake
 	srv, err := web.New(cfg, db, ix, g)

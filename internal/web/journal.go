@@ -321,7 +321,7 @@ func (s *Server) loadDay(ctx context.Context, date string) (entries []entryView,
 			}
 		}
 		e.Summary = strings.Join(parts, " · ")
-		e.Body = orgrender.HTML(e.body, false)
+		e.Body = orgrender.HTML(e.body, false, s.resolver(ctx, "journal"))
 		entries = append(entries, e.entryView)
 	}
 
