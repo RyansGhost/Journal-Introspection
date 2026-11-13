@@ -1,0 +1,6 @@
+:PROPERTIES:
+:ID: 0a1b2c3d
+:END:
+#+title: A plaintext note
+
+Plain text files outlive the programs that made them.

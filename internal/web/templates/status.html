@@ -1,0 +1,36 @@
+{{define "content"}}
+<section class="narrow status">
+  <h1>Status</h1>
+
+  <h2>Index</h2>
+  <dl class="facts">
+    <dt>Last scan</dt><dd>{{if .Scan.At.IsZero}}not yet{{else}}{{.Scan.At.Format "2 Jan 15:04:05"}}, took {{.Scan.Took}}{{end}}</dd>
+    <dt>That scan</dt><dd>{{.Scan.Seen}} files seen, {{.Scan.Changed}} re-read, {{.Scan.Touched}} touched only, {{.Scan.Deleted}} removed</dd>
+    {{if .Scan.Err}}<dt>Error</dt><dd class="error">{{.Scan.Err}}</dd>{{end}}
+    <dt>Files</dt><dd>{{range $i, $k := .Kinds}}{{if $i}}, {{end}}{{$k.N}} {{$k.Kind}}{{end}}</dd>
+    <dt>Journal entries</dt><dd>{{.Entries}}</dd>
+    <dt>Scan interval</dt><dd>{{.Interval}}</dd>
+    <dt>Excluded</dt><dd>{{.Exclude}}</dd>
+  </dl>
+  <form action="/rescan" method="post"><button>Scan now</button></form>
+
+  <h2>Grading</h2>
+  {{if .Grader.Enabled}}
+  <dl class="facts">
+    <dt>Kev server</dt><dd>{{.KevURL}}</dd>
+    <dt>Model</dt><dd>{{.Grader.Model}}</dd>
+    <dt>Rubric version</dt><dd>{{.Grader.Rubric}}</dd>
+    <dt>Entries</dt><dd>{{.Grader.Graded}} graded, {{.Grader.Pending}} waiting{{if .Grader.Failed}}, of which {{.Grader.Failed}} were rejected and will be retried{{end}}</dd>
+    <dt>Last success</dt><dd>{{if .Grader.LastSuccess.IsZero}}none since start{{else}}{{.Grader.LastSuccess.Format "2 Jan 15:04:05"}}{{end}}</dd>
+    {{if .Grader.LastError}}<dt>Last error</dt><dd class="error">{{.Grader.LastErrorAt.Format "2 Jan 15:04:05"}}: {{.Grader.LastError}}</dd>{{end}}
+  </dl>
+  {{if .Failures}}
+  <table class="listing"><thead><tr><th>Day</th><th>Attempts</th><th>Error</th></tr></thead>
+    <tbody>{{range .Failures}}<tr><td><a href="/journal/{{.Date}}">{{.Date}}</a></td><td class="num">{{.Attempts}}</td><td>{{.Error}}</td></tr>{{end}}</tbody>
+  </table>
+  {{end}}
+  {{else}}
+  <p>Grading is off. Set <code>KEV_URL</code> to the address of the Kev server, for example <code>http://192.168.1.50:8009</code>, and restart.</p>
+  {{end}}
+</section>
+{{end}}

@@ -1,0 +1,79 @@
+{{define "content"}}
+{{if .Empty}}
+<section class="empty">
+  <h1>No journal entries yet</h1>
+  <p>Nothing matching <code>journal/YYYYMMDD.org</code> has been indexed. The <a href="/status">status page</a> shows what the indexer found.</p>
+</section>
+{{else}}
+<section class="timeline" aria-label="Timeline">
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Range">
+      {{range .Ranges}}<a href="{{.URL}}" {{if .Active}}class="on" aria-current="true"{{end}}>{{.Label}}</a>{{end}}
+    </div>
+    <div class="seg" role="group" aria-label="Smoothing">
+      {{range .Avgs}}<a href="{{.URL}}" {{if .Active}}class="on" aria-current="true"{{end}}>{{.Label}}</a>{{end}}
+    </div>
+  </div>
+  <div class="legend" role="group" aria-label="Qualities shown">
+    {{range .Legend}}<a href="{{.URL}}" class="chip s{{.Slot}}{{if .Active}} on{{end}}" aria-pressed="{{.Active}}"><span class="swatch"></span>{{.Label}}</a>{{end}}
+  </div>
+  <div class="chartwrap">
+    {{.Chart}}
+    <div class="tip" hidden></div>
+  </div>
+  <div class="stripwrap">
+    <div class="striphead"><span>{{.Year}}, mood by day</span>
+      <span class="key">low <i class="k m0"></i><i class="k m1"></i><i class="k m2"></i><i class="k m3"></i><i class="k m4"></i> high <i class="k u"></i> not graded</span>
+    </div>
+    {{.Strip}}
+  </div>
+  <details class="datatable">
+    <summary>Show these scores as a table</summary>
+    <table>
+      <thead><tr>{{range .Table.Head}}<th>{{.}}</th>{{end}}</tr></thead>
+      <tbody>{{$urls := .Table.URLs}}{{range $i, $row := .Table.Rows}}<tr>{{range $j, $c := $row}}<td>{{if eq $j 0}}<a href="{{index $urls $i}}">{{$c}}</a>{{else}}{{$c}}{{end}}</td>{{end}}</tr>{{end}}</tbody>
+    </table>
+  </details>
+  <p class="note">Scores are a language model's reading of each entry. They are useful for spotting trends, and are not a clinical measure.</p>
+</section>
+
+<div class="day">
+  <article class="reader">
+    <nav class="daynav">
+      {{if .Prev}}<a href="{{.Prev}}" rel="prev">← Earlier</a>{{else}}<span></span>{{end}}
+      {{if .Next}}<a href="{{.Next}}" rel="next">Later →</a>{{end}}
+    </nav>
+    <h1>{{.Title}}</h1>
+    {{range .Entries}}
+    <section class="entry">
+      <h2>{{if .Time}}<time>{{.Time}}</time>{{end}}{{if .Heading}} {{.Heading}}{{end}}{{range .Tags}} <span class="tag">{{.}}</span>{{end}}</h2>
+      <div class="org">{{.Body}}</div>
+      {{if .Summary}}<p class="graded">{{.Summary}}</p>{{end}}
+    </section>
+    {{end}}
+    <p class="source"><a href="/files/{{.File}}">{{.File}}</a></p>
+  </article>
+
+  <aside class="scores" aria-label="Scores for this day">
+    <h2>This day</h2>
+    {{if .Graded}}
+      {{if .Theme}}<p class="theme">Mostly about <strong>{{.Theme}}</strong></p>{{end}}
+      <dl>
+      {{range .Meters}}
+        <dt>{{.Label}}</dt>
+        <dd{{if .Faint}} class="faint"{{end}}>
+          <svg class="meter" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="6" rx="3"/><rect class="fill" width="{{printf "%.0f" .Width}}" height="6" rx="3"/></svg>
+          <span>{{.Level}}{{if .Faint}} (uncertain){{end}}</span>
+        </dd>
+      {{end}}
+      </dl>
+      {{if .Flags}}<ul class="flags">{{range .Flags}}<li>{{.}}</li>{{end}}</ul>{{end}}
+    {{else if .Grading}}
+      <p class="muted">Not graded yet. Entries are graded in the background, newest first.</p>
+    {{else}}
+      <p class="muted">Grading is off because no Kev server is configured. See the <a href="/status">status page</a>.</p>
+    {{end}}
+  </aside>
+</div>
+{{end}}
+{{end}}

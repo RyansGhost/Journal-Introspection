@@ -1,0 +1,12 @@
+{{define "content"}}
+<section class="narrow">
+  <nav class="crumbs">{{range $i, $c := .Crumbs}}{{if $i}} / {{end}}<a href="{{$c.URL}}">{{$c.Name}}</a>{{end}}</nav>
+  <table class="listing">
+    <tbody>
+    {{range .Items}}
+      <tr><td><a href="{{.URL}}"{{if .Dir}} class="dir"{{end}}>{{.Name}}</a></td><td class="muted">{{.Title}}</td><td class="muted num">{{.Modified}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}

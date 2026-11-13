@@ -1,0 +1,8 @@
+/data/
+/.dev/
+/introspect
+/fakekev
+*.db
+*.db-wal
+*.db-shm
+.env

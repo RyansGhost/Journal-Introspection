@@ -1,0 +1,7 @@
+{{define "content"}}
+<article class="reader narrow">
+  <nav class="crumbs">{{range $i, $c := .Crumbs}}{{if $i}} / {{end}}<a href="{{$c.URL}}">{{$c.Name}}</a>{{end}}</nav>
+  <p class="muted">Modified {{.Modified}}{{if .JournalURL}} · <a href="{{.JournalURL}}">Open in the journal</a>{{end}}</p>
+  <div class="org">{{.Body}}</div>
+</article>
+{{end}}
