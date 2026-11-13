@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/indexer"
-	"github.com/ryansghost/journal-introspection/internal/orgrender"
+	"journal-introspection/internal/indexer"
+	"journal-introspection/internal/orgrender"
 )
 
 type crumb struct{ Name, URL string }

@@ -13,7 +13,7 @@ are mounted read-only and are never written to. How it works and why is in
 
 * Try it locally
 
-Needs Go 1.26 or newer. No Mac mini, login or Docker involved.
+Needs Go 1.26 or newer. No model server, login or Docker involved.
 
 #+begin_src bash
 make dev
@@ -26,7 +26,7 @@ nothing.
 To read your real files the same way (still read-only, still fake scores):
 
 #+begin_src bash
-make dev ORG=~/SyncRoot/org
+make dev ORG=~/org
 #+end_src
 
 =make local= runs the same thing in Docker, to check the container.
@@ -53,10 +53,11 @@ on puts a second lock in front of the app's own login.
 To update: =git pull && make up=. The database is in the =data= volume and
 only holds things derived from the org files, plus grades and sessions.
 
-* Kev on the Mac mini
+* Kev on the model server
 
-Kev is its own Python server, not an Ollama model. With 16 GB of memory,
-use the 0.8B model (the 4B model wants 32 GB).
+Kev is its own Python server, not an Ollama model. It runs on a separate
+machine on the network. On a machine with 16 GB of memory, use the 0.8B
+model (the 4B model wants 32 GB).
 
 #+begin_src bash
 git clone https://github.com/jaredpalmer/kev.git && cd kev
@@ -64,8 +65,8 @@ uv sync --extra serve
 uv run --extra serve python -m kev.serve --run jaredpalmer/kev-0.8b --port 8009
 #+end_src
 
-Then set =KEV_URL= to the Mac's LAN address. Keep port 8009 off the
-internet. If the Mac is off, the reader still works and grading resumes
+Then set =KEV_URL= to that machine's LAN address. Keep port 8009 off the
+internet. If that machine is off, the reader still works and grading resumes
 when it is back.
 
 To change models later, start Kev with the other model and change
@@ -102,11 +103,12 @@ covers a directory and everything in it. Setting =EXCLUDE= replaces the
 built-in list, which is:
 
 #+begin_example
-identities.org,crypto.org,finance*.org,invoices/**,bib/**,data/**,tmp/**
+private/**,secret*.org,*.gpg
 #+end_example
 
 Hidden files and directories are always skipped. The status page shows the
-list in use. A newly excluded file leaves the index on the next scan.
+list in use. Put your own private files in =EXCLUDE= in =.env=, which is
+not committed. A newly excluded file leaves the index on the next scan.
 
 * The rubric
 

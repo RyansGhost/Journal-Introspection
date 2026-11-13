@@ -11,11 +11,11 @@ func TestExcludeFromEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(c.Exclude, "crypto.org") || !slices.Contains(c.Exclude, "invoices/**") {
+	if !slices.Contains(c.Exclude, "private/**") || !slices.Contains(c.Exclude, "secret*.org") {
 		t.Errorf("default exclude list: %v", c.Exclude)
 	}
-	t.Setenv("EXCLUDE", " people.org , scratch/** ,")
-	if c, _ = Load(); !slices.Equal(c.Exclude, []string{"people.org", "scratch/**"}) {
+	t.Setenv("EXCLUDE", " diary-private.org , drafts/** ,")
+	if c, _ = Load(); !slices.Equal(c.Exclude, []string{"diary-private.org", "drafts/**"}) {
 		t.Errorf("EXCLUDE replaces the list: %v", c.Exclude)
 	}
 	t.Setenv("EXCLUDE", "")

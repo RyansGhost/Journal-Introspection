@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/orgrender"
+	"journal-introspection/internal/orgrender"
 )
 
 const dateFmt = "2006-01-02"

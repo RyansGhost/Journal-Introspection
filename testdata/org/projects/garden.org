@@ -1,0 +1,16 @@
+#+title: Garden project
+
+* Goals
+- Plant tomatoes and beans
+- Build a compost bin
+
+* Budget
+| Item         | Cost |
+|--------------+------|
+| Raised bed   |  120 |
+| Seeds        |   15 |
+
+* Links
+- [[file:../notes.txt][A file link]]
+- [[id:0a1b2c3d][A roam link]]
+- [[file:../secrets.org][An excluded file]]

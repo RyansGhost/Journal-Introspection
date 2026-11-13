@@ -1,5 +1,5 @@
 # make dev            run locally on a made-up journal, no login, stand-in grader
-# make dev ORG=~/SyncRoot/org   the same, on your real files (read-only)
+# make dev ORG=~/org   the same, on your real files (read-only)
 # make test           run the tests
 # make local          the same as `make dev`, but in Docker
 # make hash           make the login settings for .env

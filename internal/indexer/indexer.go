@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/store"
+	"journal-introspection/internal/store"
 )
 
 // Text files worth indexing; everything else (PDFs, images) is ignored.

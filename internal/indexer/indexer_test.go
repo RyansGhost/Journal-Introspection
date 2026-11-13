@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/store"
+	"journal-introspection/internal/store"
 )
 
 func TestSplitJournal(t *testing.T) {
@@ -48,10 +48,10 @@ func TestSplitJournal(t *testing.T) {
 }
 
 func TestExcluded(t *testing.T) {
-	pats := []string{"crypto.org", "finance*.org", "invoices/**"}
+	pats := []string{"secrets.org", "secret*.org", "private/**"}
 	for rel, want := range map[string]bool{
-		"crypto.org": true, "finance-learning.org": true, "invoices/2026/a.org": true,
-		"invoices": true, "projects/finance.org": true, "life.org": false, "journal/20260101.org": false,
+		"secrets.org": true, "secret-plans.org": true, "private/2026/a.org": true,
+		"private": true, "projects/secret-recipe.org": true, "notes.org": false, "journal/20260101.org": false,
 	} {
 		if got := Excluded(pats, rel); got != want {
 			t.Errorf("Excluded(%q) = %v, want %v", rel, got, want)
@@ -82,7 +82,7 @@ func TestScanChangeDetection(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	ix := New(db, root, []string{"crypto.org"})
+	ix := New(db, root, []string{"secrets.org"})
 	ctx := context.Background()
 
 	st, err := ix.Scan(ctx)
@@ -92,7 +92,7 @@ func TestScanChangeDetection(t *testing.T) {
 	if st.Changed != 7 {
 		t.Errorf("first scan: want 7 files read, got %d", st.Changed)
 	}
-	if n := count(t, db, `SELECT COUNT(*) FROM files WHERE path='crypto.org'`); n != 0 {
+	if n := count(t, db, `SELECT COUNT(*) FROM files WHERE path='secrets.org'`); n != 0 {
 		t.Error("excluded file was indexed")
 	}
 	if n := count(t, db, `SELECT COUNT(*) FROM entries`); n != 4 {
@@ -101,7 +101,7 @@ func TestScanChangeDetection(t *testing.T) {
 	if n := count(t, db, `SELECT COUNT(*) FROM files WHERE kind='journal'`); n != 3 {
 		t.Errorf("want 3 journal files (not-a-day.org is a note), got %d", n)
 	}
-	if n := count(t, db, `SELECT COUNT(*) FROM search WHERE search MATCH '"zettelkasten"'`); n != 1 {
+	if n := count(t, db, `SELECT COUNT(*) FROM search WHERE search MATCH '"outlive"'`); n != 1 {
 		t.Errorf("full-text search: got %d hits", n)
 	}
 

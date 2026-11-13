@@ -16,11 +16,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/config"
-	"github.com/ryansghost/journal-introspection/internal/grader"
-	"github.com/ryansghost/journal-introspection/internal/indexer"
-	"github.com/ryansghost/journal-introspection/internal/store"
-	"github.com/ryansghost/journal-introspection/internal/web"
+	"journal-introspection/internal/config"
+	"journal-introspection/internal/grader"
+	"journal-introspection/internal/indexer"
+	"journal-introspection/internal/store"
+	"journal-introspection/internal/web"
 )
 
 func main() {

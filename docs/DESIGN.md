@@ -4,7 +4,7 @@ A private web app for reading a directory of org-mode files, with a timeline of 
 
 ## Goals
 
-- Read journal entries, notes and tables from `~/SyncRoot/org` in a browser.
+- Read journal entries, notes and tables from a directory of org files in a browser.
 - Grade each journal entry on a few qualities (mood, energy, anxiety and so on) and chart them over time.
 - Stay small and readable: one binary, one database file, a few thousand lines of Go.
 - Never write to the org files. They are the source of truth; everything else can be rebuilt.
@@ -16,13 +16,13 @@ A private web app for reading a directory of org-mode files, with a timeline of 
 | Language | Go | Static binary, 14 MB `scratch` image, standard-library HTTP and templates |
 | Storage | SQLite (`modernc.org/sqlite`, pure Go) | One user and one writer; includes full-text search; no C compiler needed |
 | Org parsing | `go-org` | The parser Hugo uses; handles tables, drawers, tags and links |
-| Grader | [Kev](https://github.com/jaredpalmer/kev) on the Mac mini | Returns calibrated scores for questions with written levels, with no prompt parsing |
-| Model | Kev-0.8B | The Mac mini has 16 GB; Kev-4B wants 32 GB |
+| Grader | [Kev](https://github.com/jaredpalmer/kev) on a separate machine | Returns calibrated scores for questions with written levels, with no prompt parsing |
+| Model | Kev-0.8B | Fits a 16 GB machine; Kev-4B wants 32 GB. Any server with the same API works |
 | Charts | Server-rendered SVG | No JavaScript build or chart library; works with scripts off |
-| Hosting | Home server, Docker Compose, Caddy for TLS | Org files and the Mac mini are on the same network |
+| Hosting | Home server, Docker Compose, Caddy for TLS | Org files and the model server are on the same network |
 | Access | Public address, password plus authenticator code | Chosen for reach; see Security |
 
-Kev is not an Ollama model. It is a Python server with its own API, `POST /v1/systemone`, and runs on the Mac mini. Ollama is not used yet.
+Kev is not an Ollama model. It is a Python server with its own API, `POST /v1/systemone`, and runs on its own machine. Ollama is not used yet.
 
 ## Architecture
 
@@ -34,7 +34,7 @@ Kev is not an Ollama model. It is a Python server with its own API, `POST /v1/sy
                          │ grader ─────────────────┐                      │
                          └─────────────────────────┼──────────────────────┘
                                                    ▼ LAN
-                                    Mac mini: kev.serve :8009
+                              model server: kev.serve :8009
 ```
 
 | Part | Package | Job |
@@ -79,7 +79,7 @@ The rubric (`internal/grader/rubric.json`) is a list of Kev questions. Its hash 
 
 How the worker behaves:
 
-- One entry at a time, newest first, so recent days appear first and the Mac mini is never flooded. The first pass over about 715 days runs in the background and resumes after a restart.
+- One entry at a time, newest first, so recent days appear first and the model server is never flooded. The first pass over a few years of entries runs in the background and resumes after a restart.
 - If Kev is unreachable, wait and retry with a growing delay (5 seconds up to 10 minutes). The entry is not blamed.
 - If Kev rejects an entry (HTTP 4xx or a malformed answer), park it for an hour, then longer, and move on. The status page lists these.
 - Entries over 3,000 words are split on paragraphs to fit Kev's 8,192-token context, and the answers are combined weighted by word count.

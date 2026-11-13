@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/grader"
+	"journal-introspection/internal/grader"
 )
 
 // The chart is server-rendered SVG. Colours come from CSS classes (s1..s8 for

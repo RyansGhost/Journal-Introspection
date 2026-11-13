@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ryansghost/journal-introspection/internal/store"
+	"journal-introspection/internal/store"
 )
 
 // kevStub answers in the shape shown in the Kev README.

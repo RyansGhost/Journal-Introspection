@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/store"
+	"journal-introspection/internal/store"
 )
 
 type Status struct {
@@ -71,7 +71,7 @@ func (g *Grader) Status(ctx context.Context) Status {
 }
 
 // Run grades entries one at a time, newest first, until ctx is cancelled.
-// One request at a time keeps the Mac mini responsive.
+// One request at a time keeps the model server responsive.
 func (g *Grader) Run(ctx context.Context) {
 	if g.kev == nil {
 		slog.Info("grading disabled: KEV_URL is not set")

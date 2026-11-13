@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ryansghost/journal-introspection/internal/config"
-	"github.com/ryansghost/journal-introspection/internal/grader"
-	"github.com/ryansghost/journal-introspection/internal/indexer"
-	"github.com/ryansghost/journal-introspection/internal/store"
+	"journal-introspection/internal/config"
+	"journal-introspection/internal/grader"
+	"journal-introspection/internal/indexer"
+	"journal-introspection/internal/store"
 )
 
 const testSecret = "JBSWY3DPEHPK3PXP"
@@ -30,7 +30,7 @@ func newSite(t *testing.T, authDisabled bool) (*httptest.Server, *http.Client) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Config{OrgRoot: root, Exclude: []string{"crypto.org"}, PasswordHash: HashPassword("correct horse"),
+	cfg := config.Config{OrgRoot: root, Exclude: []string{"secrets.org"}, PasswordHash: HashPassword("correct horse"),
 		TOTPSecret: testSecret, AuthDisabled: authDisabled, ScanInterval: time.Minute}
 	ix := indexer.New(db, root, cfg.Exclude)
 	if _, err := ix.Scan(context.Background()); err != nil {
@@ -89,7 +89,7 @@ func TestPasswordAndTOTP(t *testing.T) {
 
 func TestLoginRequired(t *testing.T) {
 	ts, c := newSite(t, false)
-	for _, p := range []string{"/", "/journal/2026-11-13", "/files/", "/files/life.org", "/search?q=a", "/status"} {
+	for _, p := range []string{"/", "/journal/2026-11-13", "/files/", "/files/notes.org", "/search?q=a", "/status"} {
 		if code, _ := get(t, c, ts.URL+p); code != http.StatusSeeOther {
 			t.Errorf("%s without a session: want 303, got %d", p, code)
 		}
@@ -128,7 +128,7 @@ func TestLoginRequired(t *testing.T) {
 	if got := post("correct horse", code, nil); got != http.StatusUnauthorized {
 		t.Errorf("replayed code: want 401, got %d", got)
 	}
-	if code, body := get(t, c, ts.URL+"/journal/2026-11-13"); code != 200 || !strings.Contains(body, "chicken and sweet potatoes") {
+	if code, body := get(t, c, ts.URL+"/journal/2026-11-13"); code != 200 || !strings.Contains(body, "soup last night and baked bread") {
 		t.Errorf("journal after login: %d", code)
 	}
 }
@@ -167,25 +167,25 @@ func TestPages(t *testing.T) {
 	check("/journal/2026-11-12", 200, "Slept badly")
 	check("/journal/2026-11-11", 404)
 	check("/journal/garbage", 404)
-	check("/files/", 200, "journal/", "projects/", "quicknote.txt")
-	check("/files/projects/introspection.org", 200, "Mac mini", "<table>")
-	check("/files/quicknote.txt", 200, "plain text scratch")
+	check("/files/", 200, "journal/", "projects/", "notes.txt")
+	check("/files/projects/garden.org", 200, "Raised bed", "<table>")
+	check("/files/notes.txt", 200, "plain text scratch")
 	// Links between org files point inside the app; links to excluded files do not.
-	check("/files/projects/introspection.org", 200, `href="/files/quicknote.txt"`, `href="/files/roam/20240101120000-zettel.org"`)
-	if _, body := get(t, c, ts.URL+"/files/projects/introspection.org"); strings.Contains(body, `href="/files/crypto.org"`) {
+	check("/files/projects/garden.org", 200, `href="/files/notes.txt"`, `href="/files/roam/20240101120000-plaintext.org"`)
+	if _, body := get(t, c, ts.URL+"/files/projects/garden.org"); strings.Contains(body, `href="/files/secrets.org"`) {
 		t.Error("link to an excluded file was resolved")
 	}
-	check("/search?q=zettelkasten", 200, "<mark>zettelkasten</mark>")
+	check("/search?q=outlive", 200, "<mark>outlive</mark>")
 	check("/search?q=%22+OR+NEAR(", 200) // FTS syntax in the query must not break it
 	check("/status", 200, "3 journal")
 
 	// Excluded files and anything outside the root do not exist.
 	_, listing := get(t, c, ts.URL+"/files/")
-	if strings.Contains(listing, "crypto") {
+	if strings.Contains(listing, "secrets") {
 		t.Error("excluded file is listed")
 	}
-	check("/files/crypto.org", 404)
-	check("/search?q=seed", 200, "Nothing matches")
+	check("/files/secrets.org", 404)
+	check("/search?q=stands", 200, "Nothing matches")
 	check("/files/..%2Foutside.txt", 404)
 	check("/files/%2e%2e/outside.txt", 404)
 

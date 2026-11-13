@@ -1,4 +1,4 @@
-module github.com/ryansghost/journal-introspection
+module journal-introspection
 
 go 1.26.0
 

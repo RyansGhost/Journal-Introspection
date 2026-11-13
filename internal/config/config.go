@@ -29,7 +29,7 @@ type Config struct {
 
 // DefaultExclude keeps the most sensitive files out of the index entirely.
 // Setting EXCLUDE replaces the whole list; setting it to "" excludes nothing.
-const DefaultExclude = "identities.org,crypto.org,finance*.org,invoices/**,bib/**,data/**,tmp/**"
+const DefaultExclude = "private/**,secret*.org,*.gpg"
 
 func env(key, def string) string {
 	if v, ok := os.LookupEnv(key); ok {
