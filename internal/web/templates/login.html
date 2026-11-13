@@ -1,0 +1,9 @@
+{{define "content"}}
+<form class="login" action="/login" method="post">
+  <h1>Introspection</h1>
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  <label>Password <input type="password" name="password" autocomplete="current-password" required autofocus></label>
+  {{if .TOTP}}<label>Authenticator code <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required></label>{{end}}
+  <button>Sign in</button>
+</form>
+{{end}}

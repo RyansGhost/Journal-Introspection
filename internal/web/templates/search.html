@@ -1,0 +1,12 @@
+{{define "content"}}
+<section class="narrow">
+  <h1>Search</h1>
+  {{if .Q}}
+    {{if .Hits}}
+    <ol class="hits">
+      {{range .Hits}}<li><a href="{{.URL}}">{{.Title}}</a> <span class="muted">{{.Path}}</span><p>{{.Snippet}}</p></li>{{end}}
+    </ol>
+    {{else}}<p>Nothing matches “{{.Q}}”. Every word must appear in the file; try fewer words.</p>{{end}}
+  {{else}}<p class="muted">Type in the box above to search every indexed file.</p>{{end}}
+</section>
+{{end}}

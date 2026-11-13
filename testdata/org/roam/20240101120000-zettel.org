@@ -1,0 +1,6 @@
+:PROPERTIES:
+:ID: 0a1b2c3d
+:END:
+#+title: A zettelkasten note
+
+Plaintext belongs to you.

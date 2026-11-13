@@ -1,0 +1,30 @@
+{{define "base"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{.Title}} · Introspection</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+{{if not .Bare}}
+<header class="top">
+  <nav>
+    <a class="brand" href="/">Introspection</a>
+    <a href="/">Journal</a>
+    <a href="/files/">Files</a>
+    <a href="/status">Status</a>
+  </nav>
+  <form class="searchbox" action="/search" method="get">
+    <input type="search" name="q" placeholder="Search all notes" aria-label="Search all notes" value="{{.Q}}">
+  </form>
+  {{if not .AuthDisabled}}<form action="/logout" method="post"><button class="quiet">Sign out</button></form>{{end}}
+</header>
+{{end}}
+<main>
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}

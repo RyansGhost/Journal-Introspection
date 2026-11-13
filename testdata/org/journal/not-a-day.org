@@ -1,0 +1,2 @@
+* Notes about the journal itself
+This file lives in journal/ but is not a dated entry.

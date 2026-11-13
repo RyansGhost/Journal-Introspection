@@ -1,0 +1,11 @@
+#+title: Introspection project
+
+* Goals
+- Read my org files from anywhere
+- Chart journal scores over time
+
+* Budget
+| Item     | Cost |
+|----------+------|
+| Mac mini |  800 |
+| Domain   |   15 |
